@@ -1,0 +1,40 @@
+# Folder view configuration files
+.DS_Store
+Desktop.ini
+Icon?
+
+# Thumbnail cache files
+._*
+Thumbs.db
+
+# Files that might appear on external disks
+.Spotlight-V100
+.Trashes
+
+# Compiled Python files
+*.pyc
+
+# Application specific files
+node_modules
+
+# direnv
+.envrc
+.direnvrc
+.direnv
+
+# Editor backup files
+*~
+*.swp
+
+# dev databases
+*.sqlite*
+
+# secrets directory for passwords/keys/secrets you don't want commited to git
+# repositories
+secrets
+
+# production logs
+log
+
+# hide test data for now
+tests

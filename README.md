@@ -1,13 +1,14 @@
 # E-Paper Downloader
 
-Simple web-scraper for The Times of India e-paper website.
+Simple python web-scraper for *The Times of India* e-paper publications.
 
-# Why ?
+# Why?
 
-- Mostly to scratch an itch.
-- Data for use with Human Interaction Device Experiments
+- Read the paper - obviously
+- Scratch an itch / one-off / are-the-brain-cells-still-working kind of project etc.
+- Data collection for use with Human Interaction Device Experiments
   - Magic Mirror
-  - Rear-projection gesture controlled UI
+  - Gesture controlled UI
   - Surface table-like devices etc.
 
 # Proposed Setup
@@ -28,12 +29,16 @@ python epaper.py 'Publication Code' 'Edition Code'
 # python epaper.py 'ETE' 'ETW' # only on Mondays
 ```
 
+# Testing
+
+- Fully untested for now, will update on it soonish...
+
 # Plan
 
-- Error logging
-- Add command line processing
+- Add logging of actions
+- Add kickass command line processing
 - Manage User Configuration
   - Selection of Publication Code, Edition Code
   - Choose between JPGs or PDF page downloads
-- Notification of download completions
-- Beeware-based GUI
+- Notification of download completions via DBUS/Growl/Email etc.
+- Beeware-based GUI for viewing the pages
