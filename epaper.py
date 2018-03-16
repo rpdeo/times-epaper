@@ -51,7 +51,7 @@ def get_main_page(url):
 
 def get_toc(url):
     """Get table of contents as JSON from given `URL`."""
-    return json.loads(requests.get(url))
+    return requests.get(url).json()
 
 
 def parse_publication_codes(doc):
@@ -101,6 +101,10 @@ def download_and_save_page_images(pages, download_path):
                     num_downloads += 1
                 except IOError as E:
                     print('Could not save page {}'.format(page[1]))
+                    print('Saving raw content to file for inspection.')
+                    with open('{path}/page-{0}.dump'.format(page[1], path=download_path),
+                              'wb') as f:
+                              f.write(res.content)
                     continue
 
             # Be nice; sleep for 15 to 30 seconds between requests; it would
