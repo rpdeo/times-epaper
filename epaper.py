@@ -2,6 +2,8 @@ from PIL import Image
 from bs4 import BeautifulSoup
 from datetime import datetime
 from io import BytesIO
+from prompt_toolkit import prompt
+from prompt_toolkit.contrib.completers import WordCompleter
 import codecs
 import json
 import os
@@ -12,6 +14,26 @@ import time
 
 
 SITE = 'https://epaperlive.timesofindia.com/'
+
+
+def notify(title, text):
+    '''Notify user when download is complete.'''
+    if sys.platform == 'darwin':
+        os.system('''
+        /usr/bin/osascript -e "display notification '{0}' with title '{1}'"
+        '''.format(text, title))
+    elif sys.platform == 'linux':
+        os.system(
+            "/usr/bin/notify-send -u low '{0}' '{1}'".format(title, text))
+    elif sys.platform == 'windows':
+        # This is here to say its possible for win10 with following lib
+        # https://github.com/jithurjacob/Windows-10-Toast-Notifications
+        # from win10toast import ToastNotifier
+        # ToastNotifier().show_toast(title, text, duration=5)
+        pass
+    else:
+        # ignore for others
+        pass
 
 
 def mkdirp(path):
@@ -61,7 +83,7 @@ publication code and publication name. Return list of tuples as a dict.
     publications = []
     for select in doc.find_all(id='Publications'):
         for el in select.find_all('option'):
-            publications.append((el.get('value').strip(), el.text.strip()))
+            publications.append((el.text.strip(), el.get('value').strip()))
     return dict(publications)
 
 
@@ -72,7 +94,7 @@ edition code and edition name. Return list of tuples as a dict.
     editions = []
     for select in doc.find_all(id='Editions'):
         for el in select.find_all('option'):
-            editions.append((el.get('value').strip(), el.text.strip()))
+            editions.append((el.text.strip(), el.get('value').strip()))
     return dict(editions)
 
 
@@ -104,7 +126,7 @@ def download_and_save_page_images(pages, download_path):
                     print('Saving raw content to file for inspection.')
                     with open('{path}/page-{0}.dump'.format(page[1], path=download_path),
                               'wb') as f:
-                              f.write(res.content)
+                        f.write(res.content)
                     continue
 
             # Be nice; sleep for 15 to 30 seconds between requests; it would
@@ -122,23 +144,23 @@ def select_publication_and_edition():
     editions = parse_edition_codes(doc)
 
 
-def download_epaper(pubCode, editionCode, date=None):
+def download_epaper(pub_code, edition_code, date=None):
     if date is None:
         date = datetime.today()
     today = '{year:04d}{month:02d}{day:02d}'.format(
         year=date.year, month=date.month, day=date.day)
-    repository_path = '/Repository/{pubCode}/{editionCode}/{today}/'.format(
-        pubCode=pubCode, editionCode=editionCode, today=today)
+    repository_path = '/Repository/{pub_code}/{edition_code}/{today}/'.format(
+        pub_code=pub_code, edition_code=edition_code, today=today)
     url = SITE + repository_path + 'toc.json'
     page_info = get_toc(url)
     if 'toc' in page_info:
         totalPages = len(page_info['toc'])
-        download_path = os.path.abspath('./{pubCode}/{editionCode}/{today}'.format(
-            pubCode=pubCode, editionCode=editionCode, today=today))
-        page_url_template = '{site}/Repository/{pubCode}/{editionCode}/{today}/{pageFolder}/'
+        download_path = os.path.abspath('./{pub_code}/{edition_code}/{today}'.format(
+            pub_code=pub_code, edition_code=edition_code, today=today))
+        page_url_template = '{site}/Repository/{pub_code}/{edition_code}/{today}/{pageFolder}/'
         pages = [
             (page_url_template.format(
-                site=SITE, pubCode=pubCode, editionCode=editionCode,
+                site=SITE, pub_code=pub_code, edition_code=edition_code,
                 today=today, pageFolder=info['page_folder']),
              info['page'],
              info['page_title'])
@@ -150,6 +172,9 @@ def download_epaper(pubCode, editionCode, date=None):
             num_downloads = download_and_save_page_images(
                 valid_pages, download_path)
             print('Downloaded {} pages.'.format(num_downloads))
+            notify('E-paper downloaded.',
+                   'E-paper {pub_code}, {edition_code} edition has {num} pages. See file://{path}'.format(
+                       pub_code=pub_code, edition_code=edition_code, num=num_downloads, path=download_path))
             return None
         else:
             return False
@@ -157,16 +182,35 @@ def download_epaper(pubCode, editionCode, date=None):
         return False
 
 
-def main(pubCode, editionCode):
-    """Main execution flow of the program."""
-    return download_epaper(
-        pubCode,
-        editionCode,
-        date=datetime.today()
-    )
+def main(pub_code, edition_code, select_edition=False):
+    """Main program: Handle selection of publication and edition codes and execute
+download."""
+    if select_edition:
+        doc = get_main_page(SITE)
+        pub_code_dict = parse_publication_codes(doc)
+        pub_code_completer = WordCompleter(pub_code_dict.keys())
+        selected_pub_code_key = prompt('Enter publication: ',
+                                       completer=pub_code_completer)
+        pub_code = pub_code_dict[selected_pub_code_key]
+
+        edition_code_dict = parse_edition_codes(doc)
+        edition_code_completer = WordCompleter(edition_code_dict.keys())
+        selected_edition_code_key = prompt(
+            'Enter Edition/Location: ', completer=edition_code_completer)
+        edition_code = edition_code_dict[selected_edition_code_key]
+
+    return download_epaper(pub_code, edition_code, date=datetime.today())
 
 
 if __name__ == '__main__':
-    pubCode = sys.argv[1]
-    editionCode = sys.argv[2]
-    sys.exit(main(pubCode, editionCode))
+    if len(sys.argv) > 2:
+        # callable interface
+        pub_code = sys.argv[1]
+        edition_code = sys.argv[2]
+        sys.exit(main(pub_code, edition_code))
+    else:
+        # command-line interaction
+        pub_code = ''
+        edition_code = ''
+        select_edition = True
+        sys.exit(main(pub_code, edition_code, select_edition=select_edition))

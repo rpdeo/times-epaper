@@ -5,7 +5,7 @@ Simple python web-scraper for *The Times of India* e-paper publications.
 # Why?
 
 - Read the paper - obviously
-- Scratch an itch / one-off / are-the-brain-cells-still-working kind of project etc.
+- Scratch an itch / one-off / are-the-brain-cells-still-working... kind of project
 - Data collection for use with Human Interaction Device Experiments
   - Magic Mirror
   - Gesture controlled UI
