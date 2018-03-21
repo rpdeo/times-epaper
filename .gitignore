@@ -38,3 +38,6 @@ log
 
 # hide test data for now
 tests
+
+# separate requirements.txt for repo vs. dev setup. we don't commit the dev version.
+requirements.dev.txt
