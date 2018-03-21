@@ -13,8 +13,8 @@ Simple python web-scraper for *The Times of India* e-paper publications.
 
 # Proposed Setup
 
-- Use a low-power device at home like an RPI or your laptop for on-the-go setup.
-- Launch via cron.
+- Use a low-powered device at home like a *Raspberry Pi* or your laptop for on-the-go setup.
+- Launch via cron. or manually
 - Notification via DBUS/Growl/Email etc.
 
 ``` bash
@@ -31,14 +31,21 @@ python epaper.py 'Publication Code' 'Edition Code'
 
 # Testing
 
-- Fully untested for now, will update on it soonish...
+- Downloads work
+- Basic command-line functionality OK
+- Need to add unit tests
 
 # Plan
 
 - Add logging of actions
 - Add kickass command line processing
+  - *DONE* with word-completion for publication and edition selection, press
+    TAB at the prompts.
 - Manage User Configuration
   - Selection of Publication Code, Edition Code
   - Choose between JPGs or PDF page downloads
-- Notification of download completions via DBUS/Growl/Email etc.
+- Notification of download completions via macOS Notifications, DBUS on Linux, etc.
+  - *DONE*, see `utils.notify()`
 - Beeware-based GUI for viewing the pages
+  - *In Progress*, added `ui/app.py`, not integrated with downloader yet.;
+    also only macOS for now with development version of `toga`.
