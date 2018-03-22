@@ -1,5 +1,5 @@
 import toga
-from Pillow import Image
+# from Pillow import Image
 from datetime import datetime, timedelta
 from toga.style.pack import Pack, COLUMN, ROW
 
@@ -13,11 +13,11 @@ class EPaper(object):
         self.available_dates = [(self.today - timedelta(i)).strftime('%Y%m%d')
                                 for i in range(1, 8)]
         # Paths of downloaded page thumbnails
-        self.thumbnail_image_paths = []
+        self.thumbnail_image_paths = [None for i in range(self.num_pages)]
         # Array of all thumbnail images loaded in memory
-        self.thumbnail_images = []
+        self.thumbnail_images = [None for i in range(self.num_pages)]
         # Paths of downloaded page images
-        self.page_image_paths = []
+        self.page_image_paths = [None for i in range(self.num_pages)]
         # store current viewed Image()
         self.current_page = None
 
@@ -55,29 +55,32 @@ class EpaperApp(toga.App):
             )
         )
 
+        print(self.data.num_pages)
+
         # Thumbnail View Commands
-        thumbnail_commands = [
-            toga.Command(
-                self.display_page,
-                label='Display Page',
-                tooltip='Display Page {}'.format(i),
-                icon=self.data.thumbnail_images[i],
-                group=toga.Group.VIEW,
-                section=0
-            ) for i in self.data.num_pages
-        ]
+        thumbnail_commands = []
+        for i in range(self.data.num_pages):
+            thumbnail_commands.append(
+                toga.Command(
+                    self.display_page(None, i),
+                    label='Display Page',
+                    tooltip='Display Page {}'.format(i),
+                    # icon=self.data.thumbnail_images[i],
+                    group=toga.Group.VIEW,
+                    section=0
+                )
+            )
 
         thumbnail_buttons = [
             toga.Button(
                 'Page {}'.format(i),
-                on_press=self.display_page,
+                on_press=self.display_page(None, i),
                 # icon=self.data.thumbnail_images[i],
                 style=Pack(
-                    width=200,
-                    padding=5
+                    width=100,
+                    padding=2
                 )
-            ) for i in self.data.num_pages
-        ]
+            ) for i in range(self.data.num_pages)]
 
         # left view of SplitContainer below
         self.thumbnail_view = toga.ScrollContainer(
@@ -93,7 +96,7 @@ class EpaperApp(toga.App):
         self.page_view = toga.ScrollContainer(
             content=toga.ImageView(
                 id='page-view',
-                image=self.page_image,
+                image=self.data.current_page,
             )
         )
 
@@ -107,16 +110,18 @@ class EpaperApp(toga.App):
                         self.date_selection
                     ],
                     style=Pack(
-                        direction=ROW
+                        direction=ROW,
+                        padding=5
                     )
                 ),
                 toga.SplitContainer(
-                    children=[
+                    content=(
                         self.thumbnail_view,
                         self.page_view
-                    ],
+                    ),
                     style=Pack(
-                        direction=ROW
+                        direction=ROW,
+                        padding=5
                     )
                 )
             ],
@@ -128,13 +133,19 @@ class EpaperApp(toga.App):
         self.main_window.content = box
         self.main_window.show()
 
+    def open_document(self, fileUrl):
+        pass
+
     def display_page(self, sender, page_number):
         """Display page image identified by `page_number`."""
-        raise NotImplementedError('display_page(): TBD')
+        print(f'Displaying page {page_number}')
+        return None
 
     def get_data(self):
         """Get data from EPaper object."""
-        raise NotImplementedError('get_data(): TBD')
+        paper = EPaper()
+        paper.num_pages = 50
+        return paper
 
 
 def main():
