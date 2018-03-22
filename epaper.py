@@ -4,7 +4,7 @@ from datetime import datetime
 from io import BytesIO
 from prompt_toolkit import prompt
 from prompt_toolkit.contrib.completers import WordCompleter
-from .utils import notify
+from utils import notify
 import os
 import random
 import requests
@@ -63,13 +63,13 @@ def validate_pages(pages):
     valid = []
 
     message = 'Validate page urls...'
-    print(message,)
+    print(message, end='', flush=True)
 
     for page in pages:
 
-        print('\b' * len(message),)
+        print('\b' * len(message), end='', flush=True)
         message = 'Validating page {}'.format(page[1])
-        print(message,)
+        print(message, end='', flush=True)
 
         res = requests.get(page[0] + 'page.json')
 
@@ -78,10 +78,11 @@ def validate_pages(pages):
             valid.append(page +
                          (pdf_name,))
 
-            print('\b' * len(message),)
+            print('\b' * len(message), end='', flush=True)
             message = 'Validated page {}'.format(page[1])
-            print(message,)
+            print(message, end='', flush=True)
 
+    print(flush=True)
     return valid
 
 
@@ -89,6 +90,15 @@ def download_and_save_page_images(pages, download_path):
     num_downloads = 0
     if os.path.exists(download_path):
         for page in pages:
+            # get page_thumbnail.jpg
+            res = requests.get(page[0] + 'page_thumbnail.jpg')
+            if res.status_code == 200:
+                i = Image.open(BytesIO(res.content))
+                i.save(
+                    '{path}/page-{0:02d}-thumbnail.jpg'.format(page[1], path=download_path))
+                print('Downloaded page {0} thumbnail.'.format(page[1]))
+
+            # get high-res page
             retry_limit = 3
             retry_count = 1
             while retry_count <= retry_limit:
@@ -104,7 +114,7 @@ def download_and_save_page_images(pages, download_path):
                     try:
                         i = Image.open(BytesIO(res.content))
                         i.save(
-                            '{path}/page-{0}.jpg'.format(page[1], path=download_path))
+                            '{path}/page-{0:02d}-highres.jpg'.format(page[1], path=download_path))
                         num_downloads += 1
                         print('Downloaded page {0}.'.format(page[1]))
                         # success, exit retry loop and go to next page
@@ -114,15 +124,31 @@ def download_and_save_page_images(pages, download_path):
                         print('Could not save page {0}, attempt {1}'.format(
                             page[1], retry_count))
                         retry_count += 1
-                        # we observed truncation of images occasionally...
-                        print('Saving raw content to file for inspection.')
-                        with open('{path}/page-{0}.dump'.format(page[1], path=download_path),
-                                  'wb') as f:
-                            f.write(res.content)
+
+                        # we have observed atleast 1 corrupted highres images
+                        # for each download run; save a copy to see whats the reason...
+                        if retry_count > retry_limit:
+                            print('Saving raw content to file for inspection.')
+                            with open('{path}/page-{0:02d}-highres.dump'.format(page[1], path=download_path),
+                                      'wb') as f:
+                                f.write(res.content)
+
                 else:
                     print('Could not save page {}, HTTP status code {}'.format(
                         page[1], res.status_code))
                     retry_count += 1
+
+            # lets get the low-resolution page, if all attempts to get highres failed...
+            if retry_count > retry_limit:
+                res = requests.get(page[0] + 'big_page.jpg')
+                if res.status_code == 200:
+                    i = Image.open(BytesIO(res.content))
+                    i.save(
+                        '{path}/page-{0:02d}-lowres.jpg'.format(page[1], path=download_path))
+                    num_downloads += 1
+                    print(
+                        'Downloaded lower-resolution page {0}.'.format(page[1]))
+
     return num_downloads
 
 
