@@ -1,6 +1,6 @@
 from PIL import Image
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from prompt_toolkit import prompt
 from prompt_toolkit.contrib.completers import WordCompleter
@@ -10,11 +10,67 @@ import random
 import requests
 import sys
 import time
+import json
+import glob
 
 
 SITE = 'https://epaperlive.timesofindia.com/'
 SITE_ARCHIVE = 'https://epaperlive.timesofindia.com/Search/Archives'
 SITE_ARCHIVE_EDITION = 'https://epaperlive.timesofindia.com/Search/Archives?PUB={pub_code}'
+
+
+class SelectedEPaper(object):
+    def __init__(self):
+        # number of pages in selected epaper
+        self.num_pages = 0
+
+        # publication code and label after selection
+        self.publication = ('', '')  # (label, code)
+
+        # edition code and label after selection
+        self.edition = ('', '')  # (label, code)
+
+        # todays date
+        self.today = datetime.today().date()
+
+        # Paths of downloaded page thumbnails
+        self.thumbnail_paths = [None for i in range(self.num_pages)]
+
+        # Paths of downloaded page images
+        self.page_paths = [None for i in range(self.num_pages)]
+
+        # array index of page being viewed
+        self.current_page = 0
+
+    def get_page_image(self, page_index):
+        fname = self.page_paths[page_index]
+        try:
+            with open(fname, 'rb') as fd:
+                return Image(BytesIO(fd.read()))
+        except IOError as e:
+            print('EPaperApp: error reading {fname}')
+            return None
+
+
+class EPaper(object):
+    """Manages data that is pulled from SITE_ARCHIVE to enable selection of a specific
+publication."""
+
+    def __init__(self):
+        # dict of publication labels and codes
+        self.publications = dict([
+            ('The Times of India', 'TOI'),
+        ])
+
+        # dict of edition labels and codes
+        self.editions = dict([
+            ('Mumbai', 'BOM'),
+        ])
+
+        # selectable dates for epaper download
+        self.available_dates = [
+            (self.today - timedelta(i)).strftime('%Y%m%d') for i in range(1, 8)
+        ]
 
 
 def get_page(url):
@@ -62,7 +118,7 @@ def validate_pages(pages):
     """Validate page information and URL by fetching page json information and HTTP response status code."""
     valid = []
 
-    message = 'Validate page urls...'
+    message = 'Validate page urls'
     print(message, end='', flush=True)
 
     for page in pages:
@@ -86,17 +142,60 @@ def validate_pages(pages):
     return valid
 
 
+def find_missing(pages, download_path):
+    """On a redownload request, check for missing pages and only download those."""
+    existing = glob.glob(download_path +
+                         os.path.sep + 'page-*-thumbnail.jpg')
+    existing += glob.glob(download_path +
+                          os.path.sep + 'page-*-highres.jpg')
+    existing += glob.glob(download_path +
+                          os.path.sep + 'page-*-lowres.jpg')
+    # just return if no pages have bee downloaded yet.
+    if len(existing) == 0:
+        return pages
+
+    filepaths = []
+    for page in pages:
+        filepaths.append(
+            '{path}/page-{0}-thumbnail.jpg'.format(page[1], path=download_path))
+        filepaths.append(
+            '{path}/page-{0}-highres.jpg'.format(page[1], path=download_path))
+        filepaths.append(
+            '{path}/page-{0}-lowres.jpg'.format(page[1], path=download_path))
+
+    # else find missing ones ignoring any '*-lowres.jpg' ones
+    missing = set(sorted([p.split('-')[1]
+                          for p in (set(filepaths) - set(existing)) if not p.endswith('lowres.jpg')]))
+    selected = []
+    for m in missing:
+        for p in pages:
+            if p[1] == m:
+                selected.append(p)
+
+    return selected
+
+
 def download_and_save_page_images(pages, download_path):
     num_downloads = 0
     if os.path.exists(download_path):
+        # find missing pages
+        pages = find_missing(pages, download_path)
+
         for page in pages:
             # get page_thumbnail.jpg
             res = requests.get(page[0] + 'page_thumbnail.jpg')
             if res.status_code == 200:
-                i = Image.open(BytesIO(res.content))
-                i.save(
-                    '{path}/page-{0:02d}-thumbnail.jpg'.format(page[1], path=download_path))
-                print('Downloaded page {0} thumbnail.'.format(page[1]))
+                try:
+                    i = Image.open(BytesIO(res.content))
+                    i.save(
+                        '{path}/page-{0}-thumbnail.jpg'.format(page[1], path=download_path))
+                    print('Downloaded page {0} thumbnail.'.format(page[1]))
+                except IOError as E:
+                    print('Could not save thumbnail {0}'.format(page[1]))
+                    print('Saving raw content to file for inspection.')
+                    with open('{path}/page-{0}-thumbnail.dump'.format(page[1], path=download_path),
+                              'wb') as thumbnail:
+                        thumbnail.write(res.content)
 
             # get high-res page
             retry_limit = 3
@@ -114,11 +213,11 @@ def download_and_save_page_images(pages, download_path):
                     try:
                         i = Image.open(BytesIO(res.content))
                         i.save(
-                            '{path}/page-{0:02d}-highres.jpg'.format(page[1], path=download_path))
+                            '{path}/page-{0}-highres.jpg'.format(page[1], path=download_path))
                         num_downloads += 1
                         print('Downloaded page {0}.'.format(page[1]))
                         # success, exit retry loop and go to next page
-                        retry_count = retry_limit + 1
+                        break
                     except IOError as E:
                         # failed, try until retry_limit is exceeded
                         print('Could not save page {0}, attempt {1}'.format(
@@ -129,7 +228,7 @@ def download_and_save_page_images(pages, download_path):
                         # for each download run; save a copy to see whats the reason...
                         if retry_count > retry_limit:
                             print('Saving raw content to file for inspection.')
-                            with open('{path}/page-{0:02d}-highres.dump'.format(page[1], path=download_path),
+                            with open('{path}/page-{0}-highres.dump'.format(page[1], path=download_path),
                                       'wb') as f:
                                 f.write(res.content)
 
@@ -144,7 +243,7 @@ def download_and_save_page_images(pages, download_path):
                 if res.status_code == 200:
                     i = Image.open(BytesIO(res.content))
                     i.save(
-                        '{path}/page-{0:02d}-lowres.jpg'.format(page[1], path=download_path))
+                        '{path}/page-{0}-lowres.jpg'.format(page[1], path=download_path))
                     num_downloads += 1
                     print(
                         'Downloaded lower-resolution page {0}.'.format(page[1]))
@@ -197,6 +296,12 @@ def download_epaper(pub_code, edition_code, date=None):
         totalPages = len(page_info['toc'])
         download_path = os.path.abspath('./{pub_code}/{edition_code}/{today}'.format(
             pub_code=pub_code, edition_code=edition_code, today=today))
+
+        # save the toc
+        os.makedirs(download_path, exist_ok=True)
+        with open(os.path.sep.join([download_path, 'toc.json']), 'w') as toc:
+            toc.write(json.dumps(page_info))
+
         page_url_template = '{site}/Repository/{pub_code}/{edition_code}/{today}/{pageFolder}/'
         pages = [
             (page_url_template.format(
@@ -208,7 +313,6 @@ def download_epaper(pub_code, edition_code, date=None):
         ]
         valid_pages = validate_pages(pages)
         if len(valid_pages) > 0:
-            os.makedirs(download_path, exist_ok=True)
             print('Downloading {} pages...'.format(len(valid_pages)))
             num_downloads = download_and_save_page_images(
                 valid_pages, download_path)
