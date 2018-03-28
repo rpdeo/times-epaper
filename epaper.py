@@ -19,42 +19,113 @@ SITE_ARCHIVE = 'https://epaperlive.timesofindia.com/Search/Archives'
 SITE_ARCHIVE_EDITION = 'https://epaperlive.timesofindia.com/Search/Archives?PUB={pub_code}'
 
 
-class SelectedEPaper(object):
+class Scraper(object):
     def __init__(self):
-        # number of pages in selected epaper
-        self.num_pages = 0
+        self.site_url = 'https://epaperlive.timesofindia.com'
+        self.site_archive_url = 'https://epaperlive.timesofindia.com/Search/Archives'
+        self.site_archive_edition_url = 'https://epaperlive.timesofindia.com/Search/Archives?PUB={pub_code:s}'
+        self.repository_uri_template = '/Repository/{pub_code:s}/{edition_code:s}/{date:s}'
 
-        # publication code and label after selection
-        self.publication = ('', '')  # (label, code)
+        # page info from toc.json
+        self.page_info = None
 
-        # edition code and label after selection
-        self.edition = ('', '')  # (label, code)
+        # pages structure
+        self.pages = dict()
 
-        # todays date
-        self.today = datetime.today().date()
+    def get_repository_uri(self, pub_code, edition_code, date_str):
+        return self.repository_uri_template.format(
+            pub_code=pub_code,
+            edition_code=edition_code,
+            date=date_str
+        )
 
-        # Paths of downloaded page thumbnails
-        self.thumbnail_paths = [None for i in range(self.num_pages)]
+    def get_toc_uri(self, pub_code, edition_code, date_str):
+        return '/'.join([
+            self.site_url,
+            self.get_repository_uri(
+                pub_code,
+                edition_code,
+                date_str
+            ),
+            'toc.json'
+        ])
 
-        # Paths of downloaded page images
-        self.page_paths = [None for i in range(self.num_pages)]
-
-        # array index of page being viewed
-        self.current_page = 0
-
-    def get_page_image(self, page_index):
-        fname = self.page_paths[page_index]
-        try:
-            with open(fname, 'rb') as fd:
-                return Image(BytesIO(fd.read()))
-        except IOError as e:
-            print('EPaperApp: error reading {fname}')
+    def fetch(self, url):
+        '''GET a URL resource once with sleep deplay.'''
+        # Be nice; sleep for 15 to 30 seconds between requests; it would
+        # take about 8 to 15 mins to download about 30 pages worth. This
+        # should be *slow* enough for webmasters to not care.
+        sleep_for = random.randint(15, 30)
+        time.sleep(sleep_for)
+        # fetch
+        res = requests.get(url)
+        if res.status_code == 200:
+            if res.content_type == 'text/html':
+                return BeautifulSoup(res.text, 'html.parser')
+            elif res.content_type == 'application/json':
+                return res.json()
+            else:
+                return res.content
+        else:
+            print(f'EPaper: could not retrieve {url}')
             return None
+
+    def save_image(self, url, save_to_file, retry_limit=1):
+        '''GET an image URL with retry attempts.'''
+        retry_count = 1
+
+        if not save_to_file:
+            return (False, retry_count)
+
+        while retry_count <= retry_limit:
+            content = self.fetch(url)
+            if content is None:
+                try:
+                    image = Image.open(BytesIO(content))
+                    image.save(save_to_file)
+                    break
+                except IOError as e:
+                    retry_count += 1
+                    if retry_count > retry_limit:
+                        # retries are HTTP success but image has format errors.
+                        with open(save_to_file + '.dump', 'wb') as f:
+                            f.write(content)
+            else:
+                retry_count += 1
+
+        if retry_count > retry_limit:
+            return (False, retry_count)
+        else:
+            return (True, retry_count)
+
+    def validate_pages(self):
+        '''Validate page information and URL by fetching page json information and HTTP response status code.'''
+        valid = []
+
+        message = 'Validate page urls'
+        print(message, end='', flush=True)
+
+        for page in self.pages:
+            print('\b' * len(message), end='', flush=True)
+            message = 'Validating page {0:02d}'.format(int(page[1]))
+            print(message, end='', flush=True)
+
+            res = self.fetch(page[0] + 'page.json')
+            if res:
+                pdf_name = res['pdf']
+                valid.append(page + (pdf_name,))
+
+            print('\b' * len(message), end='', flush=True)
+            message = 'Validated page {0:02d}'.format(int(page[1]))
+            print(message, end='', flush=True)
+
+        print(flush=True)
+        return valid
 
 
 class EPaper(object):
-    """Manages data that is pulled from SITE_ARCHIVE to enable selection of a specific
-publication."""
+    '''Manages data that is pulled from SITE_ARCHIVE to enable selection of a specific
+publication.'''
 
     def __init__(self):
         # dict of publication labels and codes
@@ -69,12 +140,69 @@ publication."""
 
         # selectable dates for epaper download
         self.available_dates = [
-            (self.today - timedelta(i)).strftime('%Y%m%d') for i in range(1, 8)
+            (datetime.today().date() - timedelta(i)).strftime('%Y%m%d') for i in range(1, 8)
         ]
+
+        # publication code and label after selection
+        self.selected_publication = ('', '')  # (label, code)
+
+        # edition code and label after selection
+        self.selected_edition = ('', '')  # (label, code)
+
+        # epaper date selection, default: today's date
+        self.selected_date = datetime.today().date()
+
+        # number of pages in selected epaper
+        self.num_pages = 0
+
+        # Paths of downloaded page thumbnails
+        self.thumbnail_paths = [None for i in range(self.num_pages)]
+
+        # Paths of downloaded page images
+        self.page_paths = [None for i in range(self.num_pages)]
+
+        # array index of page being viewed
+        self.selected_page = 0
+
+        # page data
+        self.pages = []
+
+    def read_page_image(self, page_index):
+        if len(self.page_paths) > 0:
+            fname = self.page_paths[page_index]
+            try:
+                with open(fname, 'rb') as fd:
+                    return Image(BytesIO(fd.read()))
+            except IOError as e:
+                print('EPaperApp: error reading {fname}')
+        return None
+
+    def parse_publication_codes(self, doc):
+        '''Find tag with id='Publications', parse the HTML to obtain tuple of
+        publication code and publication name. Return list of tuples as a
+        dict.
+
+        '''
+        publications = []
+        for select in doc.find_all(id='Publications'):
+            for el in select.find_all('option'):
+                publications.append((el.text.strip(), el.get('value').strip()))
+        return dict(publications)
+
+    def parse_edition_codes(self, doc):
+        '''Find tag with id='Editions', parse the HTML to obtain tuple of edition code
+        and edition name. Return list of tuples as a dict.
+
+        '''
+        editions = []
+        for select in doc.find_all(id='Editions'):
+            for el in select.find_all('option'):
+                editions.append((el.text.strip(), el.get('value').strip()))
+        return dict(editions)
 
 
 def get_page(url):
-    """Get index page of E-paper site."""
+    '''Get index page of E-paper site.'''
     res = requests.get(url)
     if res.status_code == 200:
         doc = BeautifulSoup(res.text, 'html.parser')
@@ -84,7 +212,7 @@ def get_page(url):
 
 
 def get_toc(url):
-    """Get table of contents as JSON from given `URL`."""
+    '''Get table of contents as JSON from given `URL`.'''
     res = requests.get(url)
     if res.status_code == 200:
         return requests.get(url).json()
@@ -93,9 +221,9 @@ def get_toc(url):
 
 
 def parse_publication_codes(doc):
-    """Find tag with id='Publications', parse the HTML to obtain tuple of
+    '''Find tag with id='Publications', parse the HTML to obtain tuple of
 publication code and publication name. Return list of tuples as a dict.
-    """
+    '''
     publications = []
     for select in doc.find_all(id='Publications'):
         for el in select.find_all('option'):
@@ -104,9 +232,9 @@ publication code and publication name. Return list of tuples as a dict.
 
 
 def parse_edition_codes(doc):
-    """Find tag with id='Editions', parse the HTML to obtain tuple of
+    '''Find tag with id='Editions', parse the HTML to obtain tuple of
 edition code and edition name. Return list of tuples as a dict.
-    """
+    '''
     editions = []
     for select in doc.find_all(id='Editions'):
         for el in select.find_all('option'):
@@ -115,7 +243,7 @@ edition code and edition name. Return list of tuples as a dict.
 
 
 def validate_pages(pages):
-    """Validate page information and URL by fetching page json information and HTTP response status code."""
+    '''Validate page information and URL by fetching page json information and HTTP response status code.'''
     valid = []
 
     message = 'Validate page urls'
@@ -143,7 +271,7 @@ def validate_pages(pages):
 
 
 def find_missing(pages, download_path):
-    """On a redownload request, check for missing pages and only download those."""
+    '''On a redownload request, check for missing pages and only download those.'''
     existing = glob.glob(download_path +
                          os.path.sep + 'page-*-thumbnail.jpg')
     existing += glob.glob(download_path +
@@ -252,7 +380,7 @@ def download_and_save_page_images(pages, download_path):
 
 
 def select_publication_and_edition():
-    """Select publication and edition interactively."""
+    '''Select publication and edition interactively.'''
     pub_code = None
     edition_code = None
     # get index archive page
@@ -328,10 +456,10 @@ def download_epaper(pub_code, edition_code, date=None):
 
 
 def main(pub_code, edition_code, select_edition=False):
-    """Main program: Handle selection of publication and edition codes and execute
+    '''Main program: Handle selection of publication and edition codes and execute
 page downloads.
 
-    """
+    '''
     on_date = datetime.today()
     if select_edition:
         pub_code, edition_code = select_publication_and_edition()

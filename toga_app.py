@@ -1,14 +1,13 @@
 import toga
 from toga.style.pack import Pack, COLUMN, ROW
 
-from epaper import EPaper, SelectedEPaper
+from epaper import EPaper
 
 
 class EpaperApp(toga.App):
     def startup(self):
         # Data object instances
         self.epaper = EPaper()
-        self.selected_epaper = SelectedEPaper()
 
         # GUI
         self._menu_items = {}
@@ -43,7 +42,7 @@ class EpaperApp(toga.App):
 
         # Thumbnail View Commands
         thumbnail_commands = []
-        for i in range(self.selected_epaper.num_pages):
+        for i in range(self.epaper.num_pages):
             thumbnail_commands.append(
                 toga.Command(
                     self.display_page(None, i),
@@ -62,7 +61,7 @@ class EpaperApp(toga.App):
                     width=100,
                     padding=2
                 )
-            ) for i in range(self.selected_epaper.num_pages)
+            ) for i in range(self.epaper.num_pages)
         ]
 
         # left view of SplitContainer below
@@ -79,8 +78,8 @@ class EpaperApp(toga.App):
         self.page_view = toga.ScrollContainer(
             content=toga.ImageView(
                 id='page-view',
-                image=self.selected_epaper.get_page_image(
-                    self.selected_epaper.current_page),
+                image=self.epaper.read_page_image(
+                    self.epaper.selected_page),
             )
         )
 
