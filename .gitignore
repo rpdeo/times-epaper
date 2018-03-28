@@ -34,7 +34,7 @@ node_modules
 secrets
 
 # production logs
-log
+logs
 
 # hide test data for now
 tests
