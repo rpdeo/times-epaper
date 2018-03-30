@@ -2,23 +2,23 @@ import sys
 import os
 
 
-def notify(title, text):
+def notify(title=None, message=None):
     '''Notify user when download is complete.'''
     if sys.platform == 'darwin':
         command = '''/usr/bin/osascript -e "display notification \\"{0}\\" with title \\"{1}\\"" '''.format(
-            text, title)
+            message, title)
         # print(command)
         os.system(command)
     elif sys.platform == 'linux':
         command = '''/usr/bin/notify-send -u low "{0}" "{1}" '''.format(
-            title, text)
+            title, message)
         # print(command)
         os.system(command)
     elif sys.platform == 'windows':
         # This is here to say its possible for win10 with following lib
         # https://github.com/jithurjacob/Windows-10-Toast-Notifications
         # from win10toast import ToastNotifier
-        # ToastNotifier().show_toast(title, text, duration=5)
+        # ToastNotifier().show_toast(title, message, duration=5)
         pass
     else:
         # ignore for others

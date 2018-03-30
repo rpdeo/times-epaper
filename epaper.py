@@ -1,5 +1,6 @@
 from PIL import Image
 from bs4 import BeautifulSoup
+from collections import namedtuple
 from datetime import datetime, timedelta
 from io import BytesIO
 from prompt_toolkit import prompt
@@ -17,16 +18,10 @@ import time
 
 __version__ = (0, 0, 1)
 
-# log to console
-logging.basicConfig(
-    filename='epaper-app.log',
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.DEBUG
-)
-logger = logging.getLogger(__name__)
+# logging
+logger = logging.getLogger('epaper')
 
-
-SITE = 'https://epaperlive.timesofindia.com/?AspxAutoDetectCookieSupport=1'
+SITE = 'https://epaperlive.timesofindia.com'
 SITE_ARCHIVE = 'https://epaperlive.timesofindia.com/Search/Archives?AspxAutoDetectCookieSupport=1'
 SITE_ARCHIVE_EDITION = 'https://epaperlive.timesofindia.com/Search/Archives?AspxAutoDetectCookieSupport=1&PUB={pub_code}'
 
@@ -71,7 +66,8 @@ class AppConfig:
             self.config['App'] = {
                 'app_name': 'EPaperApp',
                 'app_version': '{0}.{1}.{2}'.format(*__version__),
-                'cache_dir': self.cache_dir
+                'cache_dir': self.cache_dir,
+                'log_file': self.cache_dir + os.path.sep + 'epaper-app.log'
             }
             self.config['Http'] = {
                 'request_delay_min': 15,
@@ -84,7 +80,7 @@ class AppConfig:
                 'TOI': ''
             }
             self.config['TOI'] = {
-                'site_url': 'https://epaperlive.timesofindia.com/?AspxAutoDetectCookieSupport=1',
+                'site_url': 'https://epaperlive.timesofindia.com',
                 'site_archive_url': 'https://epaperlive.timesofindia.com/Search/Archives?AspxAutoDetectCookieSupport=1',
                 'selected_pub_code': '',
                 'selected_edition_code': ''
@@ -132,12 +128,12 @@ class Scraper:
         self.selected_pub_code = app_config.config[publisher]['selected_pub_code']
         self.selected_edition_code = app_config.config[publisher]['selected_edition_code']
 
-        self.repository_uri_template = '/Repository/{pub_code:s}/{edition_code:s}/{date:s}'
+        self.repository_uri_template = 'Repository/{pub_code:s}/{edition_code:s}/{date:s}'
 
-        # page info from toc.json
-        self.page_info = None
+        # requests session object
+        self.session = requests.session()
 
-    def get_repository_uri(self, pub_code, edition_code, date_str):
+    def _build_repository_uri(self, pub_code=None, edition_code=None, date_str=None):
         '''Return formatted repository uri path.'''
         return self.repository_uri_template.format(
             pub_code=pub_code,
@@ -145,17 +141,44 @@ class Scraper:
             date=date_str
         )
 
-    def get_toc_uri(self, pub_code, edition_code, date_str):
+    def build_toc_url(self, pub_code=None, edition_code=None, date_str=None):
         '''Return formatted toc.json URL path.'''
         return '/'.join([
             self.site_url,
-            self.get_repository_uri(
-                pub_code,
-                edition_code,
-                date_str
+            self._build_repository_uri(
+                pub_code=pub_code,
+                edition_code=edition_code,
+                date_str=date_str
             ),
             'toc.json'
         ])
+
+    def build_page_urls(self, pub_code=None, edition_code=None,
+                        date_str=None, page_folder=None):
+        '''Return formatted page urls to be downloaded.'''
+        page_url = '/'.join([
+            self.site_url,
+            self._build_repository_uri(
+                pub_code=pub_code,
+                edition_code=edition_code,
+                date_str=date_str
+            ),
+            page_folder
+        ])
+
+        # if we have a valid page_url, get PDF file name
+        pdf_url = None
+        res = self.fetch(page_url + '/page.json')
+        if res:
+            pdf_url = page_url + '/' + res['pdf']
+
+        # each value is [url, filename, filename_exists]
+        return {
+            'thumbnail': [page_url + '/page_thumbnail.jpg', None, False],
+            'lowres': [page_url + '/big_page.jpg', None, False],
+            'highres': [page_url + '/big_page2.jpg', None, False],
+            'pdf': [pdf_url, None, False]
+        }
 
     def fetch(self, url, delay=False):
         '''GET a URL resource once with sleep deplay.'''
@@ -166,7 +189,7 @@ class Scraper:
             sleep_for = random.randint(15, 30)
             time.sleep(sleep_for)
         # fetch
-        res = requests.get(url)
+        res = self.session.get(url)
         if res.status_code == 200:
             content_type = res.headers.get('content-type')
             if content_type.startswith('text/html'):
@@ -180,16 +203,17 @@ class Scraper:
             logger.error(f'EPaper: could not retrieve {url}')
             return None
 
-    def save_image(self, url, save_to_file, retry_limit=1):
-        '''GET an image URL with retry attempts.'''
+    def save_image(self, url, save_to_file, retry_limit=1, delay=True):
+        '''Fetch given URL and save the image with specified retry attempts and random
+delay between requests.'''
         retry_count = 1
 
         if not save_to_file:
             return (False, retry_count)
 
         while retry_count <= retry_limit:
-            content = self.fetch(url)
-            if content is None:
+            content = self.fetch(url, delay=delay)
+            if content:
                 try:
                     image = Image.open(BytesIO(content))
                     image.save(save_to_file)
@@ -207,16 +231,6 @@ class Scraper:
             return (False, retry_count)
         else:
             return (True, retry_count)
-
-    def validate_pages(self):
-        '''Validate page information and URL by fetching page json information and HTTP response status code.'''
-        valid = []
-        for page in self.pages:
-            res = self.fetch(page[0] + 'page.json')
-            if res:
-                pdf_name = res['pdf']
-                valid.append(page + (pdf_name,))
-        return valid
 
     def parse_publication_codes(self, doc):
         '''Find tag with id='Publications', parse the HTML to obtain tuple of
@@ -246,7 +260,11 @@ class EPaper:
     '''Manages data that is pulled from SITE_ARCHIVE to enable selection of a specific
 publication.'''
 
-    def __init__(self):
+    def __init__(self, publisher=None, app_config=None):
+        # app config
+        self.publisher = publisher
+        self.app_config = app_config
+
         # dict of publication labels and codes
         self.publications = dict([
             ('The Times of India', 'TOI'),
@@ -271,19 +289,24 @@ publication.'''
         # epaper date selection, default: today's date
         self.selected_date = datetime.today().date()
 
+        # download area
+        self.download_path = ''
+
+        # table of contents for the selected publication: a dict
+        self.toc_dict = dict()
+
         # number of pages in selected epaper
         self.num_pages = 0
-
-        # Paths of downloaded page thumbnails
-        self.thumbnail_paths = [None for i in range(self.num_pages)]
-
-        # Paths of downloaded page images
-        self.page_paths = [None for i in range(self.num_pages)]
 
         # array index of page being viewed
         self.selected_page = 0
 
         # page data
+        # urls: dict of lists where each key points to [url, filename, exists]
+        # see implementation in scraper.build_page_urls()
+        # this is can be made better
+        self.Page = namedtuple(
+            'Page', ['number', 'title', 'urls'])
         self.pages = []
 
     def read_page_image(self, page_index):
@@ -296,6 +319,40 @@ publication.'''
             except IOError as e:
                 logger.error('EPaperApp: error reading {fname}')
         return None
+
+    def save_codes_to_config(self):
+        pub_code = self.selected_publication[1]
+        edition_code = self.selected_edition[1]
+        if self.publisher:
+            self.app_config.config[self.publisher]['selected_pub_code'] = pub_code
+            self.app_config.config[self.publisher]['selected_edition_code'] = edition_code
+            self.app_config.save()
+
+    def create_download_dir(self):
+        '''Given publication date and pub_code and edition_code, create disk cache path.'''
+        pub_code = self.selected_publication[1]
+        edition_code = self.selected_edition[1]
+        date = self.selected_date
+        if (date is not None) and \
+           (pub_code is not None) and \
+           (pub_code != '') and \
+           (edition_code is not None) and \
+           (edition_code != ''):
+            self.download_path = os.path.sep.join([
+                self.app_config.config['App']['cache_dir'],
+                pub_code,
+                edition_code,
+                str(date.date())  # YYYY-MM-DD
+            ])
+            os.makedirs(self.download_path, exist_ok=True)
+
+    def save_page_metadata(self):
+        '''Save self.pages after first initial download, so any subsequent redownloads
+can restart from this db than re-requesting all data again. This should also
+help manage planned sync feature.
+
+        '''
+        pass
 
 
 class UI:
@@ -329,6 +386,18 @@ supported by underlying GUI toolkit.
             'selected_pub_code', '')
         self.selected_edition_code = self.app_config.config[self.publisher].get(
             'selected_edition_code', '')
+
+        # download_path
+        self.download_path = ''
+
+        # successful downloads of pages
+        self.num_downloads = 0
+
+        # page numbers for failed attempts
+        self.failed = []
+
+        # status updates for ui
+        self.last_message = ''
 
     def select_publication(self, publications, default=None):
         '''Select publication code and label.'''
@@ -378,34 +447,25 @@ and return a datetime object.'''
                 retry = True
         return on_date
 
-    def save_pub_code(self, pub_code=None):
-        if pub_code:
-            self.app_config.config[self.publisher]['selected_pub_code'] = pub_code
-            self.app_config.save()
+    def notify(self, publication=None, edition=None):
+        title = '{edition} edition of {publication} downloaded.'.format(
+            publication=publication,
+            edition=edition
+        )
+        message = 'It has {num} pages. Stored at {path}'.format(
+            num=self.num_downloads,
+            path=self.download_path
+        )
+        notify(title=title, message=message)
 
-    def save_edition_code(self, edition_code=None):
-        if edition_code:
-            self.app_config.config[self.publisher]['selected_edition_code'] = edition_code
-            self.app_config.save()
-
-    def create_download_dir(self, date=None):
-        '''Given publication date and pub_code and edition_code, create disk cache path.'''
-        pub_code = self.app_config.config[self.publisher].get(
-            'selected_pub_code')
-        edition_code = self.app_config.config[self.publisher].get(
-            'selected_edition_code')
-        if (date is not None) and \
-           (pub_code is not None) and \
-           (pub_code != '') and \
-           (edition_code is not None) and \
-           (edition_code != ''):
-            path = os.path.sep.join([
-                self.app_config.config['App']['cache_dir'],
-                pub_code,
-                edition_code,
-                str(date.date())  # YYYY-MM-DD
-            ])
-            os.makedirs(path, exist_ok=True)
+    def update_status(self, message=None, end='\n', flush=False):
+        '''Mostly print() wrapper for now.'''
+        if message:
+            if self.text_ui:
+                if self.last_message:
+                    print('\b' * len(self.last_message), end='', flush=True)
+                print(message, end=end, flush=flush)
+                self.last_message = message
 
 
 def get_page(url):
@@ -626,7 +686,7 @@ def download_epaper(pub_code, edition_code, date=None):
         date = datetime.today()
     today = '{year:04d}{month:02d}{day:02d}'.format(
         year=date.year, month=date.month, day=date.day)
-    repository_path = '/Repository/{pub_code}/{edition_code}/{today}/'.format(
+    repository_path = 'Repository/{pub_code}/{edition_code}/{today}/'.format(
         pub_code=pub_code, edition_code=edition_code, today=today)
     url = SITE + repository_path + 'toc.json'
     page_info = get_toc(url)
@@ -668,6 +728,16 @@ def download_epaper(pub_code, edition_code, date=None):
 def new_main():
     # Load app configuration
     app_config = AppConfig()
+
+    # setup logging
+    logging.basicConfig(
+        filename=app_config.config['App']['log_file'],
+        filemode='w',
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.DEBUG
+    )
+
+    # choose a default publisher
     publisher = 'TOI'
 
     # Scraper instance
@@ -677,7 +747,7 @@ def new_main():
     ui = UI(publisher=publisher, app_config=app_config, text=True)
 
     # Data instance
-    epaper = EPaper()
+    epaper = EPaper(publisher=publisher, app_config=app_config)
 
     # Pick a publication
     doc = scraper.fetch(scraper.site_archive_url)
@@ -688,16 +758,14 @@ def new_main():
             default=app_config.config[publisher].get(
                 'selected_pub_code', None)
         )
-        ui.save_pub_code(epaper.selected_publication[1])
     else:
         return False
 
     # Pick an edition
     doc = scraper.fetch(
         scraper.site_archive_edition_url.format(
-            pub_code=epaper.selected_publication[1]
-        )
-    )
+            pub_code=epaper.selected_publication[1]))
+
     if doc:
         epaper.editions = scraper.parse_edition_codes(doc)
         epaper.selected_edition = ui.select_edition(
@@ -705,7 +773,6 @@ def new_main():
             default=app_config.config[publisher].get(
                 'selected_edition_code', None)
         )
-        ui.save_edition_code(epaper.selected_edition[1])
     else:
         return False
 
@@ -713,10 +780,17 @@ def new_main():
        epaper.selected_edition[1] == '':
         return False
 
+    epaper.save_codes_to_config()
+
     # Pick a date,
     # XXX: date may not be required for some editions...
     epaper.selected_date = ui.select_pub_date()
-    ui.create_download_dir(epaper.selected_date)
+
+    # $HOME/cache_dir/pub/edition/date
+    epaper.create_download_dir()
+
+    # inform ui
+    ui.download_path = epaper.download_path
 
     logger.info('Downloading epaper...')
     logger.info('pub_code={0}, edition={1}, date={2}'.format(
@@ -724,6 +798,120 @@ def new_main():
         epaper.selected_edition[1],
         str(epaper.selected_date.date())
     ))
+
+    date_str = '{year:04d}{month:02d}{day:02d}'.format(
+        year=epaper.selected_date.year,
+        month=epaper.selected_date.month,
+        day=epaper.selected_date.day
+    )
+
+    toc_url = scraper.build_toc_url(
+        pub_code=epaper.selected_publication[1],
+        edition_code=epaper.selected_edition[1],
+        date_str=date_str
+    )
+
+    epaper.toc_dict = scraper.fetch(toc_url)
+
+    # check for valid dict format.
+    if 'toc' not in epaper.toc_dict:
+        logger.error('TOC JSON format error! exiting...')
+        return False
+
+    # save the toc to default download location
+    toc_file = os.path.sep.join([epaper.download_path, 'toc.json'])
+    with open(toc_file, 'w') as toc:
+        toc.write(json.dumps(epaper.toc_dict))
+
+    epaper.num_pages = len(epaper.toc_dict['toc'])
+
+    # build the epaper.pages list of epaper.Page structures
+    for i, page in enumerate(epaper.toc_dict['toc']):
+        ui.update_status(
+            message='Retrieving page {0} metadata'.format(i),
+            end='',
+            flush=True
+        )
+
+        urls = scraper.build_page_urls(
+            pub_code=epaper.selected_publication[1],
+            edition_code=epaper.selected_edition[1],
+            date_str=date_str,
+            page_folder=page['page_folder']
+        )
+
+        urls['thumbnail'][1] = epaper.download_path + os.path.sep + \
+            'page-{0:03d}-thumbnail.jpg'.format(int(page['page']))
+        urls['lowres'][1] = epaper.download_path + os.path.sep + \
+            'page-{0:03d}-lowres.jpg'.format(int(page['page']))
+        urls['highres'][1] = epaper.download_path + os.path.sep + \
+            'page-{0:03d}-highres.jpg'.format(int(page['page']))
+        urls['pdf'][1] = epaper.download_path + os.path.sep + \
+            'page-{0:03d}-highres.pdf'.format(int(page['page']))
+
+        epaper.pages.append(
+            epaper.Page(
+                number=int(page['page']),
+                title=page['page_title'],
+                urls=urls
+            )
+        )
+
+    ui.update_status(
+        message='Downloading pages...',
+        end='',
+        flush=True
+    )
+    # download required pages
+    for i, page in enumerate(epaper.pages):
+        page_downloads = 0
+        for j, url_key in enumerate(page.urls):
+            url = page.urls[url_key][0]
+            filename = page.urls[url_key][1]
+            file_exists = page.urls[url_key][2]
+
+            if file_exists:
+                continue
+
+            if url_key == 'pdf':
+                continue
+
+            status, count = scraper.save_image(url, filename)
+            if status:
+                page_downloads += 1
+                # update file_exists flag in epaper.pages
+                if os.path.exists(filename):
+                    epaper.pages[i].urls[url_key][2] = True
+        # track
+        if page_downloads >= 2:
+            # successful download and save of thumbnail and at least one of
+            # low or highres images.
+            ui.num_downloads += 1
+            ui.update_status(
+                message='Downloaded page {}'.format(page.number),
+                end='',
+                flush=True
+            )
+        else:
+            # note failed attempts
+            ui.failed.append(page.number)
+            ui.update_status(
+                message='Failed to downloaded page {}'.format(page.number),
+                end='',
+                flush=True
+            )
+
+    # final counts
+    ui.update_status(message='Downloaded {0} pages. Failed to download {1} pages.'.format(
+        ui.num_downloads, len(ui.failed)))
+
+    # epaper.save_page_metadata()
+
+    # notify
+    ui.notify(
+        publication=epaper.selected_publication[0],
+        edition=epaper.selected_edition[0]
+    )
 
 
 def main(pub_code, edition_code, select_edition=False):
