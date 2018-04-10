@@ -28,22 +28,22 @@ SITE_ARCHIVE_EDITION = 'https://epaperlive.timesofindia.com/Search/Archives?Aspx
 
 class AppConfig:
     def __init__(self):
-        self.config_home = os.path.sep.join([
+        self.config_home = os.path.join(
             os.environ.get('HOME'),
             '.config',
             'epaper-app'
-        ])
+        )
 
-        self.config_file = os.path.sep.join([
+        self.config_file = os.path.join(
             self.config_home,
             'config.ini'
-        ])
+        )
 
-        self.cache_dir = os.path.sep.join([
+        self.cache_dir = os.path.join(
             os.environ.get('HOME'),
             '.cache',
             'epaper-app'
-        ])
+        )
 
         self.valid = False
 
@@ -67,7 +67,7 @@ class AppConfig:
                 'app_name': 'EPaperApp',
                 'app_version': '{0}.{1}.{2}'.format(*__version__),
                 'cache_dir': self.cache_dir,
-                'log_file': self.cache_dir + os.path.sep + 'epaper-app.log'
+                'log_file': os.path.join(self.cache_dir, 'epaper-app.log')
             }
             self.config['Http'] = {
                 'request_delay_min': 15,
@@ -309,13 +309,21 @@ publication.'''
             'Page', ['number', 'title', 'urls'])
         self.pages = []
 
-    def read_page_image(self, page_index):
-        '''Read and return page image from disk given page_index and page_paths'''
-        if len(self.page_paths) > 0:
-            fname = self.page_paths[page_index]
+        # publications available in cache
+        # each element of list is a tuple(pub_code, edition_code, date_str)
+        self.on_disk_pubs = []
+
+    def get_page_image_from_disk(self, page_index, image_type='thumbnail'):
+        '''Read and return page image from disk given page_index.'''
+        if len(self.pages) > 0:
+            page = self.pages[page_index]
             try:
-                with open(fname, 'rb') as fd:
-                    return Image(BytesIO(fd.read()))
+                filename = page.urls[image_type][1]
+                if os.path.exists(filename):
+                    with open(filename, 'rb') as fd:
+                        return Image(BytesIO(fd.read()))
+                else:
+                    return None
             except IOError as e:
                 logger.error('EPaperApp: error reading {fname}')
         return None
@@ -338,12 +346,12 @@ publication.'''
            (pub_code != '') and \
            (edition_code is not None) and \
            (edition_code != ''):
-            self.download_path = os.path.sep.join([
+            self.download_path = os.path.join(
                 self.app_config.config['App']['cache_dir'],
                 pub_code,
                 edition_code,
                 str(date.date())  # YYYY-MM-DD
-            ])
+            )
             os.makedirs(self.download_path, exist_ok=True)
 
     def save_page_metadata(self):
@@ -352,7 +360,32 @@ can restart from this db than re-requesting all data again. This should also
 help manage planned sync feature.
 
         '''
-        pass
+        if len(self.pages) > 0:
+            filename = os.path.join(self.download_path, 'page_metadata.json')
+            with open(filename, 'w') as fd:
+                fd.write(json.dumps(self.pages))
+
+    def find_on_disk_pubs(self):
+        '''Find previously downloaded publications within cache directory.'''
+        cache_dir = self.app_config.config['App']['cache_dir']
+        return [tuple(dirpath.split('/')[-3:])
+                for dirpath, dirs, files in os.walk(cache_dir)
+                if 'toc.json' in files]
+
+    def load_pub(self, pub_code=None, edition_code=None, date_str=None):
+        '''Load self.pages data from json dump in disk cache.'''
+        cache_dir = self.app_config.config['App']['cache_dir']
+        download_path = os.path.join(
+            cache_dir, pub_code, edition_code, date_str)
+        toc_filename = os.path.join(download_path, 'toc.json')
+        metadata_filename = os.path.join(download_path, 'page_metadata.json')
+        if os.path.exists(toc_filename) and \
+           os.path.exists(metadata_filename):
+            with open(toc_filename, 'r') as fd:
+                toc = json.load(fd)
+            with open(metadata_filename, 'r') as fd:
+                metadata = json.load(fd)
+        return (toc, metadata)
 
 
 class UI:
@@ -539,12 +572,9 @@ def validate_pages(pages):
 
 def find_missing(pages, download_path):
     '''On a redownload request, check for missing pages and only download those.'''
-    existing = glob.glob(download_path +
-                         os.path.sep + 'page-*-thumbnail.jpg')
-    existing += glob.glob(download_path +
-                          os.path.sep + 'page-*-highres.jpg')
-    existing += glob.glob(download_path +
-                          os.path.sep + 'page-*-lowres.jpg')
+    existing = glob.glob(os.path.join(download_path, 'page-*-thumbnail.jpg'))
+    existing += glob.glob(os.path.join(download_path, 'page-*-highres.jpg'))
+    existing += glob.glob(os.path.join(download_path, 'page-*-lowres.jpg'))
     # just return if no pages have bee downloaded yet.
     if len(existing) == 0:
         return pages
@@ -697,7 +727,7 @@ def download_epaper(pub_code, edition_code, date=None):
 
         # save the toc
         os.makedirs(download_path, exist_ok=True)
-        with open(os.path.sep.join([download_path, 'toc.json']), 'w') as toc:
+        with open(os.path.join(download_path, 'toc.json'), 'w') as toc:
             toc.write(json.dumps(page_info))
 
         page_url_template = '{site}/Repository/{pub_code}/{edition_code}/{today}/{pageFolder}/'
@@ -819,7 +849,7 @@ def new_main():
         return False
 
     # save the toc to default download location
-    toc_file = os.path.sep.join([epaper.download_path, 'toc.json'])
+    toc_file = os.path.join(epaper.download_path, 'toc.json')
     with open(toc_file, 'w') as toc:
         toc.write(json.dumps(epaper.toc_dict))
 
@@ -840,14 +870,14 @@ def new_main():
             page_folder=page['page_folder']
         )
 
-        urls['thumbnail'][1] = epaper.download_path + os.path.sep + \
-            'page-{0:03d}-thumbnail.jpg'.format(int(page['page']))
-        urls['lowres'][1] = epaper.download_path + os.path.sep + \
-            'page-{0:03d}-lowres.jpg'.format(int(page['page']))
-        urls['highres'][1] = epaper.download_path + os.path.sep + \
-            'page-{0:03d}-highres.jpg'.format(int(page['page']))
-        urls['pdf'][1] = epaper.download_path + os.path.sep + \
-            'page-{0:03d}-highres.pdf'.format(int(page['page']))
+        urls['thumbnail'][1] = os.path.join(
+            epaper.download_path, 'page-{0:03d}-thumbnail.jpg'.format(int(page['page'])))
+        urls['lowres'][1] = os.path.join(
+            epaper.download_path, 'page-{0:03d}-lowres.jpg'.format(int(page['page'])))
+        urls['highres'][1] = os.path.join(
+            epaper.download_path, 'page-{0:03d}-highres.jpg'.format(int(page['page'])))
+        urls['pdf'][1] = os.path.join(
+            epaper.download_path, 'page-{0:03d}-highres.pdf'.format(int(page['page'])))
 
         epaper.pages.append(
             epaper.Page(
@@ -902,10 +932,13 @@ def new_main():
             )
 
     # final counts
-    ui.update_status(message='Downloaded {0} pages. Failed to download {1} pages.'.format(
-        ui.num_downloads, len(ui.failed)))
+    ui.update_status(message='Downloaded {0} pages.'.format(ui.num_downloads))
+    if len(ui.failed) > 0:
+        ui.update_status(message='Failed to download {0} pages: {1}'.format(
+            len(ui.failed), repr(ui.failed)))
 
-    # epaper.save_page_metadata()
+    # save page metadata as json, so UI tools can read it.
+    epaper.save_page_metadata()
 
     # notify
     ui.notify(

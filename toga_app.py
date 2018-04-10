@@ -78,7 +78,7 @@ class EpaperApp(toga.App):
         self.page_view = toga.ScrollContainer(
             content=toga.ImageView(
                 id='page-view',
-                image=self.epaper.read_page_image(
+                image=self.epaper.get_page_image_from_disk(
                     self.epaper.selected_page),
             )
         )
