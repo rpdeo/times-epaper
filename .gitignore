@@ -28,6 +28,7 @@ node_modules
 
 # dev databases
 *.sqlite*
+*.db
 
 # secrets directory for passwords/keys/secrets you don't want commited to git
 # repositories
