@@ -1,11 +1,13 @@
+Pillow==5.0.0
+appnope==0.1.0
 beautifulsoup4==4.6.0
 bs4==0.0.1
-Pillow==5.0.0
 pyobjc-core==4.1
 pyobjc-framework-Cocoa==4.1
 pyobjc-framework-NotificationCenter==4.1
+requests==2.18.4
 rubicon-objc==0.2.10
-toga==0.3.0.dev8
 toga-cocoa==0.3.0.dev8
 toga-core==0.3.0.dev8
+toga==0.3.0.dev8
 travertino==0.1.2
