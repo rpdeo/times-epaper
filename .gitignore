@@ -14,6 +14,10 @@ Thumbs.db
 # Compiled Python files
 *.pyc
 
+# python package artifacts
+dist/
+*.egg-info/
+
 # Application specific files
 node_modules
 
