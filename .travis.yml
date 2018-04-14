@@ -1,15 +1,32 @@
 # travis-ci support
 
 language: python
+python:
+  - 3.6
 
 matrix:
   include:
     - python: 3.6
       env: TOXENV=py36
 
-install: pip install tox
+install: pip install -U tox-travis
 
 script: tox
+
+# Assuming you have installed the travis-ci CLI tool, after you
+# create the Github repo and add it to Travis, run the
+# following command to finish PyPI deployment setup:
+# $ travis encrypt --add deploy.password
+deploy:
+  provider: pypi
+  distributions: sdist bdist_wheel
+  user: rpdeo
+  password:
+    secure: PLEASE_REPLACE_ME
+  on:
+    tags: true
+    repo: rpdeo/times-epaper
+    python: 3.6
 
 notifications:
   email: false

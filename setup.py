@@ -62,7 +62,7 @@ setup(
     python_requires='>=3.6',
     entry_points={
         'console_scripts': [
-            'epaper=epaper:main',
+            'epaper=epaper.cli:main',
         ],
     },
     project_urls={
