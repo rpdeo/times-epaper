@@ -1,17 +1,20 @@
-from appconfig import AppConfig
-from epaper import EPaper
-from scraper import Scraper
-from ui import UI
+from epaper.appconfig import AppConfig
+from epaper.epaper import EPaper
+from epaper.scraper import Scraper
+from epaper.ui import UI
+import click
 import json
 import logging
 import os
-import sys
 
 logger = logging.getLogger('cli')
 
 
-def main():  # noqa: ok we know this is complex
-    '''Main execution thread.'''
+@click.command()
+@click.option('--publication_code', default='TOI', help='Publication code as on SITE_ARCHIVE')
+@click.option('--edition_code', default='BOM', help='Edition code as on SITE_ARCHIVE')
+def main(publication_code, edition_code):  # noqa: ok we know this is complex
+    '''EPaper Command Line Interface.'''
     # Load app configuration
     app_config = AppConfig()
 
@@ -204,4 +207,4 @@ def main():  # noqa: ok we know this is complex
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    main()

@@ -50,6 +50,7 @@ setup(
         'toga-cocoa==0.3.0.dev8',
         'toga-core==0.3.0.dev8',
         'travertino==0.1.2',
+        'click==6.7',
     ],
     extras_require={
         'dev': [
@@ -57,6 +58,8 @@ setup(
         ],
         'test': [
             'coverage',
+            'pytest',
+            'tox',
         ],
     },
     python_requires='>=3.6',

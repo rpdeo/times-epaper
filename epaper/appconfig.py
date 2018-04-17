@@ -2,7 +2,7 @@ import configparser
 import logging
 import os
 
-from . import __version__
+import epaper
 
 # logging
 logger = logging.getLogger('epaper')
@@ -47,7 +47,7 @@ class AppConfig:
            not self.valid:
             self.config['App'] = {
                 'app_name': 'EPaperApp',
-                'app_version': '{0}.{1}.{2}.{3}'.format(__version__.split('.')),
+                'app_version': '{0}.{1}.{2}.{3}'.format(epaper.__version__.split('.')),
                 'cache_dir': self.cache_dir,
                 'log_file': os.path.join(self.cache_dir, 'epaper-app.log')
             }

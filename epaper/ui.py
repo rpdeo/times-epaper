@@ -1,6 +1,7 @@
 from prompt_toolkit import prompt
 from prompt_toolkit.contrib.completers import WordCompleter
-from utils import notify
+from epaper.utils import notify
+from datetime import datetime
 import logging
 
 # logging
