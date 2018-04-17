@@ -40,8 +40,8 @@ publication.'''
         # edition code and label after selection
         self.selected_edition = ('', '')  # (label, code)
 
-        # epaper date selection, default: today's date
-        self.selected_date = datetime.today().date()
+        # epaper date selection, default: today's datetime object
+        self.selected_date = datetime.today()
 
         # download area
         self.download_path = ''
