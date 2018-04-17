@@ -1,8 +1,10 @@
+from datetime import datetime
 from epaper.appconfig import AppConfig
 from epaper.epaper import EPaper
 from epaper.scraper import Scraper
 from epaper.ui import UI
 import click
+import epaper
 import json
 import logging
 import os
@@ -10,12 +12,13 @@ import os
 logger = logging.getLogger('cli')
 
 
-@click.command()
-@click.option('--publication_code', default='TOI', help='Publication code as on SITE_ARCHIVE')
-@click.option('--edition_code', default='BOM', help='Edition code as on SITE_ARCHIVE')
-def main(publication_code, edition_code):  # noqa: ok we know this is complex
-    '''EPaper Command Line Interface.'''
-    # Load app configuration
+def doit(interactive=True,
+         publication_code=None,
+         edition_code=None,
+         date=None,
+         from_config=False):  # noqa: we know this function is complex
+    '''Main Execution Module'''
+    # Load app configuration: app-specific configuration management
     app_config = AppConfig()
 
     # setup logging
@@ -26,28 +29,43 @@ def main(publication_code, edition_code):  # noqa: ok we know this is complex
         level=logging.DEBUG
     )
 
-    # choose a default publisher
+    # choose a default publisher -- as of now this is the only one.
     publisher = 'TOI'
 
-    # Scraper instance
+    # Scraper instance: scraper functions
     scraper = Scraper(publisher=publisher, app_config=app_config)
 
-    # UI instance: text-based UI
+    # UI instance: generic ui interaction functions
     ui = UI(publisher=publisher, app_config=app_config, text=True)
 
-    # Data instance
+    # Data instance: Data management
     epaper = EPaper(publisher=publisher, app_config=app_config)
 
     # Pick a publication
     doc = scraper.fetch(scraper.site_archive_url)
     if doc:
         epaper.publications = scraper.parse_publication_codes(doc)
-        epaper.selected_publication = ui.select_publication(
-            epaper.publications,
-            default=app_config.config[publisher].get(
+        if publication_code and \
+           (publication_code in epaper.publications.values()):
+            # non-interactive with cli options
+            epaper.selected_publication = [
+                (k, v) for k, v in epaper.publications.items() if v == publication_code][0]
+        elif publication_code is None and from_config:
+            # non-interactive with config file
+            publication_code = app_config.config[publisher].get(
                 'selected_pub_code', None)
-        )
+            if publication_code in epaper.publications.values():
+                epaper.selected_publication = [
+                    (k, v) for k, v in epaper.publications.items() if v == publication_code][0]
+        else:
+            # simple interactive mode
+            epaper.selected_publication = ui.select_publication(
+                epaper.publications,
+                default=app_config.config[publisher].get(
+                    'selected_pub_code', None)
+            )
     else:
+        logger.error('Could not obtain publication codes.')
         return False
 
     # Pick an edition
@@ -57,12 +75,27 @@ def main(publication_code, edition_code):  # noqa: ok we know this is complex
 
     if doc:
         epaper.editions = scraper.parse_edition_codes(doc)
-        epaper.selected_edition = ui.select_edition(
-            epaper.editions,
-            default=app_config.config[publisher].get(
+        if edition_code and \
+           (edition_code in epaper.editions.values()):
+            # non-interactive with cli options
+            epaper.selected_edition = [
+                (k, v) for k, v in epaper.editions.items() if v == edition_code][0]
+        elif edition_code is None and from_config:
+            # non-interactive with config file
+            edition_code = app_config.config[publisher].get(
                 'selected_edition_code', None)
-        )
+            if edition_code in epaper.editions.values():
+                epaper.selected_edition = [
+                    (k, v) for k, v in epaper.editions.items() if v == edition_code][0]
+        else:
+            # simple interactive mode
+            epaper.selected_edition = ui.select_edition(
+                epaper.editions,
+                default=app_config.config[publisher].get(
+                    'selected_edition_code', None)
+            )
     else:
+        logger.error('Could not obtain edition codes.')
         return False
 
     if epaper.selected_publication[1] == '' or \
@@ -71,9 +104,12 @@ def main(publication_code, edition_code):  # noqa: ok we know this is complex
 
     epaper.save_codes_to_config()
 
-    # Pick a date,
+    # Pick a date, if we are in interactive mode, else it defaults to todays date.
     # XXX: date may not be required for some editions...
-    epaper.selected_date = ui.select_pub_date()
+    if interactive:
+        epaper.selected_date = ui.select_pub_date()
+    elif isinstance(date, type('')):
+        epaper.selected_date = datetime.strptime(date, '%Y-%m-%d')
 
     # $HOME/cache_dir/pub/edition/date
     epaper.create_download_dir()
@@ -204,6 +240,50 @@ def main(publication_code, edition_code):  # noqa: ok we know this is complex
         publication=epaper.selected_publication[0],
         edition=epaper.selected_edition[0]
     )
+
+
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
+
+@click.command(context_settings=CONTEXT_SETTINGS)
+@click.option('--interactive', default=True, is_flag=True, help='Run in interactive mode.')
+@click.option('--publication_code', default='', help='Publication code as on SITE_ARCHIVE')
+@click.option('--edition_code', default='', help='Edition code as on SITE_ARCHIVE')
+@click.option('--date', default=str(datetime.now().date()), help='Edition date, default is todays date.')
+@click.option('--from_config', default=False, is_flag=True, help='Use publication and edition codes from default config file.')
+@click.option('--verbose', default=False, is_flag=True, help='Be more verbose on STDOUT.')
+@click.option('--version', is_flag=True, help='Print version.')
+def main(interactive,
+         publication_code,
+         edition_code,
+         date,
+         from_config,
+         verbose,
+         version):
+    '''EPaper Command Line Interface.'''
+
+    if version:
+        click.echo('EPaper version {0}'.format(epaper.__version__))
+    elif publication_code and \
+            edition_code and \
+            date:
+        if verbose:
+            click.echo('Non-interactive mode.')
+        doit(interactive=False,
+             publication_code=publication_code,
+             edition_code=edition_code,
+             date=date,
+             from_config=False)
+    elif from_config:
+        if verbose:
+            click.echo('Using configured settings.')
+        doit(interactive=False, from_config=True)
+    elif interactive:
+        if verbose:
+            click.echo('Using interactive mode.')
+        doit(interactive=True, from_config=False)
+    else:
+        click.echo('You have selected an unknown cli configuration. Try again!')
 
 
 if __name__ == '__main__':
