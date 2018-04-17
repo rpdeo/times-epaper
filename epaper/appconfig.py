@@ -47,7 +47,7 @@ class AppConfig:
            not self.valid:
             self.config['App'] = {
                 'app_name': 'EPaperApp',
-                'app_version': '{0}.{1}.{2}.{3}'.format(epaper.__version__.split('.')),
+                'app_version': epaper.__version__,
                 'cache_dir': self.cache_dir,
                 'log_file': os.path.join(self.cache_dir, 'epaper-app.log')
             }
@@ -68,6 +68,10 @@ class AppConfig:
                 'selected_edition_code': ''
             }
             self.save()
+        else:
+            # update config to match software state if loaded from
+            # self.config_file
+            self.update_config()
 
     def validate_config(self):
         self.valid = False
@@ -95,3 +99,13 @@ class AppConfig:
         if self.valid:
             with open(self.config_file, 'w') as fd:
                 self.config.write(fd)
+
+    def update_config(self):
+        '''Update saved config for newer values of certain configuration variables.'''
+        # update app_version
+        self.config['App']['app_version'] = epaper.__version__
+        # update user_agent
+        self.config['Http']['user_agent'] = self.config['App']['app_name'] + '/' + \
+            self.config['App']['app_version']
+        # save config
+        self.save()
