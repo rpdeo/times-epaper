@@ -69,4 +69,4 @@ epaper # runs from venv/bin/epaper, test it out..
 
 # Plan Ahead
 
-See <./docs/plan.md>
+See [Plan](docs/plan.md)
