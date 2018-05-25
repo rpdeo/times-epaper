@@ -43,6 +43,14 @@ def doit(interactive=True,
 
     # Pick a publication
     doc = scraper.fetch(scraper.site_archive_url)
+
+    # Highlight if not available
+    message = 'This website is currently not available in your region.'
+    if doc and (message in doc.body.text):
+        logger.error(message)
+        print(message)
+        return False
+
     if doc:
         epaper.publications = scraper.parse_publication_codes(doc)
         if publication_code and \
@@ -269,21 +277,22 @@ def main(interactive,
             date:
         if verbose:
             click.echo('Non-interactive mode.')
-        doit(interactive=False,
-             publication_code=publication_code,
-             edition_code=edition_code,
-             date=date,
-             from_config=False)
+        return doit(interactive=False,
+                    publication_code=publication_code,
+                    edition_code=edition_code,
+                    date=date,
+                    from_config=False)
     elif from_config:
         if verbose:
             click.echo('Using configured settings.')
-        doit(interactive=False, from_config=True)
+        return doit(interactive=False, from_config=True)
     elif interactive:
         if verbose:
             click.echo('Using interactive mode.')
-        doit(interactive=True, from_config=False)
+        return doit(interactive=True, from_config=False)
     else:
         click.echo('You have selected an unknown cli configuration. Try again!')
+        return False
 
 
 if __name__ == '__main__':
