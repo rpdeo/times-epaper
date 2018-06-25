@@ -62,8 +62,8 @@ class AppConfig:
                 'TOI': ''
             }
             self.config['TOI'] = {
-                'site_url': 'https://epaperlive.timesofindia.com',
-                'site_archive_url': 'https://epaperlive.timesofindia.com/Search/Archives?AspxAutoDetectCookieSupport=1',
+                'site_url': 'https://epaperlive.timesgroup.com',
+                'site_archive_url': 'https://epaperlive.timesgroup.com/Search/Archives',
                 'selected_pub_code': '',
                 'selected_edition_code': ''
             }

@@ -77,6 +77,7 @@ def doit(interactive=True,
         return False
 
     # Pick an edition
+    # logger.info(f'XXX - {epaper.selected_publication[1]}')
     doc = scraper.fetch(
         scraper.site_archive_edition_url.format(
             pub_code=epaper.selected_publication[1]))
@@ -144,9 +145,13 @@ def doit(interactive=True,
         date_str=date_str
     )
 
-    epaper.toc_dict = scraper.fetch(toc_url)
+    epaper.toc_dict = scraper.fetch(toc_url, delay=False)
 
     # check for valid dict format.
+    if epaper.toc_dict is None:
+        logger.error('Table of contents could not be retrieved! exiting...')
+        return False
+
     if 'toc' not in epaper.toc_dict:
         logger.error('TOC JSON format error! exiting...')
         return False
@@ -190,12 +195,12 @@ def doit(interactive=True,
             )
         )
 
+    # download required pages
     ui.update_status(
         message='Downloading pages...',
         end='',
         flush=True
     )
-    # download required pages
     for i, page in enumerate(epaper.pages):
         page_downloads = 0
         for j, url_key in enumerate(page.urls):
@@ -209,7 +214,7 @@ def doit(interactive=True,
             if url_key == 'pdf':
                 continue
 
-            status, count = scraper.save_image(url, filename)
+            status, count = scraper.save_image(url, filename, delay=True)
             if status:
                 page_downloads += 1
                 # update file_exists flag in epaper.pages
@@ -254,15 +259,13 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
-@click.option('--interactive', default=True, is_flag=True, help='Run in interactive mode.')
 @click.option('--publication_code', default='', help='Publication code as on SITE_ARCHIVE')
 @click.option('--edition_code', default='', help='Edition code as on SITE_ARCHIVE')
 @click.option('--date', default=str(datetime.now().date()), help='Edition date, default is todays date.')
-@click.option('--from_config', default=False, is_flag=True, help='Use publication and edition codes from default config file.')
-@click.option('--verbose', default=False, is_flag=True, help='Be more verbose on STDOUT.')
+@click.option('--from_config', is_flag=True, help='Use publication and edition codes from default config file.')
+@click.option('--verbose', is_flag=True, help='Be more verbose on STDOUT.')
 @click.option('--version', is_flag=True, help='Print version.')
-def main(interactive,
-         publication_code,
+def main(publication_code,
          edition_code,
          date,
          from_config,
@@ -286,13 +289,10 @@ def main(interactive,
         if verbose:
             click.echo('Using configured settings.')
         return doit(interactive=False, from_config=True)
-    elif interactive:
+    else:
         if verbose:
             click.echo('Using interactive mode.')
         return doit(interactive=True, from_config=False)
-    else:
-        click.echo('You have selected an unknown cli configuration. Try again!')
-        return False
 
 
 if __name__ == '__main__':

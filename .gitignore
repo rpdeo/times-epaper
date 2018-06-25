@@ -44,3 +44,6 @@ logs
 
 # hide test data for now
 data/tests
+
+# also hide notes on request/response
+docs/requests.md

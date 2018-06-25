@@ -16,7 +16,7 @@ class Scraper:
     def __init__(self, publisher=None, app_config=None):
         self.site_url = app_config.config[publisher]['site_url']
         self.site_archive_url = app_config.config[publisher]['site_archive_url']
-        self.site_archive_edition_url = '&'.join([
+        self.site_archive_edition_url = '?'.join([
             app_config.config[publisher]['site_archive_url'],
             'PUB={pub_code:s}'
         ])
@@ -26,7 +26,10 @@ class Scraper:
         self.repository_uri_template = 'Repository/{pub_code:s}/{edition_code:s}/{date:s}'
 
         # requests session object
-        self.session = requests.session()
+        self.session = requests.Session()
+
+        # user-agent
+        self.user_agent = app_config.config['Http']['user_agent']
 
     def _build_repository_uri(self, pub_code=None, edition_code=None, date_str=None):
         '''Return formatted repository uri path.'''
@@ -78,13 +81,12 @@ class Scraper:
     def fetch(self, url, delay=False):
         '''GET a URL resource once with sleep deplay.'''
         if delay:
-            # Be nice; sleep for 15 to 30 seconds between requests; it would
-            # take about 8 to 15 mins to download about 30 pages worth. This
-            # should be *slow* enough for webmasters to not care.
-            sleep_for = random.randint(15, 30)
+            # Be nice; sleep for 5 to 15 seconds between requests
+            # XXX: fix the config part soon
+            sleep_for = random.randint(5, 15)
             time.sleep(sleep_for)
         # fetch
-        res = self.session.get(url)
+        res = self.session.get(url, headers={'User-Agent': self.user_agent})
         if res.status_code == 200:
             content_type = res.headers.get('content-type')
             if content_type.startswith('text/html'):
@@ -95,6 +97,8 @@ class Scraper:
                 # probably an image
                 return res.content
         else:
+            # for h in res.request.headers:
+            #    logger.info(f'XXX - {h} = {res.request.headers[h]}')
             logger.error('could not retrieve {0}'.format(url))
             return None
 
