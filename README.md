@@ -1,3 +1,11 @@
+# Project Status
+
+Backend API's have changed since this was made, so it will not work any ways ...
+
+Development on hold until I have time for this... :)
+
+I have only updated `requirements.txt` to do away with DependABot alerts.
+
 # E-Paper Downloader
 
 Simple python web-scraper for *The Times of India* e-paper publication

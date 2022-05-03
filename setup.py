@@ -21,6 +21,7 @@ setup(
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Environment :: Console',
+        'Environment :: Linux',
         'Environment :: MacOS X',
         'Environment :: X11 Applications',
         'Intended Audience :: End Users/Desktop',
@@ -38,19 +39,14 @@ setup(
     keywords='news scraper image-viewer app cross-platform gui',
     packages=find_packages(
         exclude=['contrib', 'docs', 'tests', 'logs']),
-    install_requires=[  # taken from requirements.txt
-        'beautifulsoup4==4.6.0',
-        'bs4==0.0.1',
-        'Pillow==5.0.0',
-        'pyobjc-core==4.1',
-        'pyobjc-framework-Cocoa==4.1',
-        'pyobjc-framework-NotificationCenter==4.1',
-        'rubicon-objc==0.2.10',
-        'toga==0.3.0.dev8',
-        'toga-cocoa==0.3.0.dev8',
-        'toga-core==0.3.0.dev8',
-        'travertino==0.1.2',
-        'click==6.7',
+    install_requires=[ 
+        'requests',
+        'beautifulsoup4',
+        'bs4',
+        'Pillow',
+        'toga',
+        'click',
+        'prompt_toolkit',
     ],
     extras_require={
         'dev': [

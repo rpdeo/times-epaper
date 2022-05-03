@@ -1,5 +1,5 @@
 from prompt_toolkit import prompt
-from prompt_toolkit.contrib.completers import WordCompleter
+from prompt_toolkit.completion import WordCompleter
 from epaper.utils import notify
 from datetime import datetime
 import logging
@@ -54,6 +54,7 @@ supported by underlying GUI toolkit.
 
     def select_publication(self, publications, default=None):
         '''Select publication code and label.'''
+        print(publications.keys())
         pub_code_completer = WordCompleter(publications.keys())
         if default:
             default_key = [

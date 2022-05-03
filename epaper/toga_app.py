@@ -3,9 +3,9 @@ from toga.style.pack import Pack, COLUMN, ROW
 
 import logging
 
-from epaper import EPaper
-from appconfig import AppConfig
-from scraper import Scraper
+from epaper.epaper import EPaper
+from epaper.appconfig import AppConfig
+from epaper.scraper import Scraper
 
 
 class EpaperApp(toga.App):

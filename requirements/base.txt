@@ -1,0 +1,6 @@
+Pillow
+beautifulsoup4
+bs4
+requests
+click
+prompt_toolkit

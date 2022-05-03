@@ -1,7 +1,0 @@
-requests==2.18.4
-setuptools==39.0.1
-prompt_toolkit==1.0.15
-toga_core==0.3.0.dev8
-Pillow==5.1.0
-beautifulsoup4==4.6.0
-toga==0.3.0.dev8

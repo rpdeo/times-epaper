@@ -145,7 +145,7 @@ def doit(interactive=True,
         date_str=date_str
     )
 
-    epaper.toc_dict = scraper.fetch(toc_url, delay=False)
+    epaper.toc_dict = scraper.fetch(toc_url)
 
     # check for valid dict format.
     if epaper.toc_dict is None:
@@ -214,7 +214,7 @@ def doit(interactive=True,
             if url_key == 'pdf':
                 continue
 
-            status, count = scraper.save_image(url, filename, delay=True)
+            status, count = scraper.save_image(url, filename, delay=False)
             if status:
                 page_downloads += 1
                 # update file_exists flag in epaper.pages
@@ -262,7 +262,7 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 @click.option('--publication_code', default='', help='Publication code as on SITE_ARCHIVE')
 @click.option('--edition_code', default='', help='Edition code as on SITE_ARCHIVE')
 @click.option('--date', default=str(datetime.now().date()), help='Edition date, default is todays date.')
-@click.option('--from_config', is_flag=True, help='Use publication and edition codes from default config file.')
+@click.option('--from-config', is_flag=True, help='Use publication and edition codes from default config file.')
 @click.option('--verbose', is_flag=True, help='Be more verbose on STDOUT.')
 @click.option('--version', is_flag=True, help='Print version.')
 def main(publication_code,

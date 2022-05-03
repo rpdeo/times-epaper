@@ -89,9 +89,10 @@ class Scraper:
         res = self.session.get(url, headers={'User-Agent': self.user_agent})
         if res.status_code == 200:
             content_type = res.headers.get('content-type')
+            logger.info(f'XXX - {content_type}')
             if content_type.startswith('text/html'):
                 return BeautifulSoup(res.text, 'html.parser')
-            elif content_type.startswith('application/json'):
+            if content_type.startswith('application/json'):
                 return res.json()
             else:
                 # probably an image
@@ -112,7 +113,7 @@ delay between requests.'''
 
         while retry_count <= retry_limit:
             content = self.fetch(url, delay=delay)
-            if content:
+            if content and isinstance(content, bytes):
                 try:
                     image = Image.open(BytesIO(content))
                     image.save(save_to_file)
